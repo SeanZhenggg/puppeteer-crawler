@@ -1,0 +1,3 @@
+node_modules/
+*.txt
+pnpm-lock.yaml
