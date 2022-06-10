@@ -9,8 +9,8 @@
   "author": "Sean Zheng",
   "license": "MIT",
   "dependencies": {
-    "async": "^3.2.4",
     "cheerio": "^1.0.0-rc.11",
+    "prompt-sync": "^4.2.0",
     "puppeteer": "^14.3.0",
     "request": "^2.88.2"
   }
