@@ -1,41 +1,31 @@
 const puppeteer = require('puppeteer');
-const cheerio = require('cheerio');
 const fs = require('fs')
-const KEYWORD_REGEXP = /(.+)-\s?(?=[\u4e00-\u9fa5])/
+
+// some used constant
+let INPUT_KEYWORD
 const RESULT_LINK_SELECTOR = 'div.NJo7tc.Z26q7c.jGGQ5e > div > a'
 const LINK_FILTER_REGEXP = '蝦皮購物台灣'
-const SHOPEE_INPUT_SELECTOR = '#main > div > div.shopee-top.container-wrapper > div.container-wrapper.header-with-search-wrapper > div > div.header-with-search__search-section > div.shopee-searchbar > div > form > input'
 const GOOGLE_INPUT_SELECTOR = 'body > div.L3eUgb > div.o3j99.ikrT4e.om7nvf > form > div:nth-child(1) > div.A8SBwf > div.RNNXgb > div > div.a4bIc > input'
 const URL_KEYWORD_PARAMS_REGEXP = /keyword=([A-Za-z0-9%]+)/
 const URL_TAG_PARAMS_REGEXP = /([A-Za-z0-9%]+)-tag/
 const SHOPEE_SITE_SYNTAX = 'site:shopee.tw'
-const keywordResults = new Set()
+const OUTPUT_FILE_NAME = 'result.txt'
 
-async function googleSearch(page, keyword, resultFilter = LINK_FILTER_REGEXP) {
+async function doGoogleSearch(page, keyword) {
   await page.goto('https://google.com');
 
-  await goSearch(page, keyword)
-  
-  await page.waitForSelector('#botstuff')
-
-  let filterResults = await filterSearchResults(page, resultFilter)
-  return filterResults
-}
-
-async function goSearch(page, keyword, selector = GOOGLE_INPUT_SELECTOR) {
-  const input = await page.$(selector);
-
+  const input = await page.$(GOOGLE_INPUT_SELECTOR);
   if (input) {
     await input.focus();
     await input.type(keyword);
   }
 
   await page.keyboard.press('Escape');
-
   await page.keyboard.press('Enter');
+  await page.waitForSelector('#botstuff')
 }
 
-async function filterSearchResults(page, filters) {
+async function getFilteredSearchResultLinks(page, filters) {
   const filterResults = await page.$$eval(RESULT_LINK_SELECTOR, (results, titleFilter) => {
     return results
       .filter(e => {
@@ -49,25 +39,49 @@ async function filterSearchResults(page, filters) {
   return filterResults
 }
 
+async function getSearchResultLinks(page, keyword) {
+  await doGoogleSearch(page, keyword)
+
+  return await getFilteredSearchResultLinks(page, LINK_FILTER_REGEXP)
+}
+
+function getKeyword(data) {
+  switch(true) {
+    case /keyword=/.test(data):
+      var [, matched] = data.match(URL_KEYWORD_PARAMS_REGEXP)
+      return decodeURIComponent(matched)
+    case /-tag/.test(data):
+      var [, matched] = data.match(URL_TAG_PARAMS_REGEXP)
+      return decodeURIComponent(matched)
+    default:
+      console.error('[getKeyword] no keyword matched!')
+      return undefined
+  }
+}
+
 async function recursiveGetSearchKeywords(page, results, index = 0) {
+  const keywordResults = new Set()
   for(let i = 0; i < results.length; i++) {
     const pageUrl = results[i]
-    let keyword
-
-    if(/keyword=/.test(pageUrl)) {
-      const [, matched] = pageUrl.match(URL_KEYWORD_PARAMS_REGEXP)
-      keyword = decodeURIComponent(matched)
-    } else if (/-tag/.test(pageUrl)) {
-      const [, matched] = pageUrl.match(URL_TAG_PARAMS_REGEXP)
-      keyword = decodeURIComponent(matched)
+    
+    let keyword = getKeyword(pageUrl)
+    if(keyword) {
+      keywordResults.add(keyword)
     }
-    keywordResults.add(keyword)
 
     if(index !== 1) {
-      let secondaryResult = await googleSearch(page, `${keyword} ${SHOPEE_SITE_SYNTAX}`)
+      let secondaryResult = await getSearchResultLinks(page, `${keyword} ${SHOPEE_SITE_SYNTAX}`)
       recursiveGetSearchKeywords(page, secondaryResult, index + 1)
     }
   }
+
+  return keywordResults
+}
+
+function getResult(results) {
+  return Array.from(results).reduce((result, keyword) => {
+    return result += keyword + '\n'
+  }, '')
 }
 
 (async () => {
@@ -75,20 +89,20 @@ async function recursiveGetSearchKeywords(page, results, index = 0) {
     headless: false, // 不使用 headless 模式，就會開啟瀏覽器來實際動作
     slowMo: 50, // 每個動作的間隔時間，方便觀察實際動作
   });
+
   const page = await browser.newPage(); // 開啟新分頁
 
-  let filterResults = await googleSearch(page, `耳溫槍 ${SHOPEE_SITE_SYNTAX}`)
+  let filterResults = await getSearchResultLinks(page, `耳溫槍 ${SHOPEE_SITE_SYNTAX}`)
   
-  await recursiveGetSearchKeywords(page, filterResults, 0)
+  const keywordResults = await recursiveGetSearchKeywords(page, filterResults, 0)
 
-  console.log('keywordResults = ', keywordResults)
-  const result = Array.from(keywordResults).reduce((result, keyword) => {
-    return result += keyword + '\n'
-  }, '')
-  fs.writeFile('result.txt', result, (err) => {
+  const result = getResult(keywordResults)
+  
+  fs.writeFile(OUTPUT_FILE_NAME, result, (err) => {
     if(err) throw err;
-    console.log('saved!')
+    console.log(`已儲存存檔案。檔案名稱為: ${OUTPUT_FILE_NAME}`)
   })
+
   // browser.close();
   // let body = await page.content()
   // let $ = await cheerio.load(body)
