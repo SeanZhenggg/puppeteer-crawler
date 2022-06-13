@@ -1,20 +1,28 @@
 // modules
+require('dotenv').config()
+const argv = require('minimist')(process.argv.slice(2))
+
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 const os = require('os')
 const prompt = require('prompt-sync')({ sigint: true })
-const { getRandomInt,log } = require('./utils/index');
+const { getRandomInt, log, getDesktopPath } = require('./utils/index');
 
 // constant
 const RESULT_LINK_SELECTOR = 'div.NJo7tc.Z26q7c.jGGQ5e > div > a'
-const LINK_FILTER_REGEXP = '蝦皮購物台灣'
 const GOOGLE_INPUT_SELECTOR = '[title="Google 搜尋"]'
 const URL_KEYWORD_PARAMS_REGEXP = /keyword=(%23|%EF%BC%83){0,2}([A-Za-z0-9%]+)/
+const CITE_SEARCH_FILTER = '.*search.*'
 const URL_TAG_PARAMS_REGEXP = /(%23|%EF%BC%83){0,2}([A-Za-z0-9%]+)-tag/
+const CITE_TAG_FILTER = '.*-tag'
 const SHOPEE_SITE_SYNTAX = 'site:shopee.tw'
 const NEXT_PAGE_SELECTOR = "#pnnext"
+
+// debug log switch
 let DEBUG_LOG
+// output file name
+const OUTPUT_FILE_NAME = 'result.txt'
 
 // result variable
 const keywordResults = new Set()
@@ -56,17 +64,23 @@ async function goNextPage(page) {
     return Promise.reject(`[goNextPage] get error! ${error}`)
   }
 }
-async function getFilteredSearchResultLinks(page, filters) {
+async function getFilteredSearchResultLinks(page) {
   try {
-    const filterResults = await page.$$eval(RESULT_LINK_SELECTOR, (results, titleFilter) => {
-      return results
-        .filter(e => {
-          const title = e.querySelector('h3').innerText
-          const reg = new RegExp(titleFilter)
-          return reg.test(title)
-        })
-        .map(e => e.href)
-    }, filters)
+    const filterResults = await page.$$eval(RESULT_LINK_SELECTOR, 
+      (results, searchFilter, tagFilter) => {
+        return results
+          .filter(e => {
+            const citeText = e.querySelector('cite[role="text"] > span').innerText
+            const reg_search = new RegExp(searchFilter)
+            const reg_tag = new RegExp(tagFilter)
+            return reg_search.test(citeText) || reg_tag.test(citeText)
+          })
+          .map(e => e.href)
+      }, 
+      CITE_SEARCH_FILTER, 
+      CITE_TAG_FILTER
+    )
+
     DEBUG_LOG && filterResults.slice().forEach((href) => {
       log(`搜尋結果 ${decodeURIComponent(href)} 匹配。`)
     })
@@ -83,7 +97,7 @@ async function getSearchResultLinks(page, keyword, pages = 2) {
     DEBUG_LOG && log(`此次搜尋${pages}頁, 共${pages * 10}筆結果`)
     while(--count >= 0) {
       DEBUG_LOG && log(`現在搜尋第 ${pages - count} 頁...`)
-      const results = await getFilteredSearchResultLinks(page, LINK_FILTER_REGEXP)
+      const results = await getFilteredSearchResultLinks(page)
       resultLinks = resultLinks.concat(results)
       if(count === 0) break
       await goNextPage(page)
@@ -138,33 +152,56 @@ function getResult(results) {
     return result += keyword + '\n'
   }, '')
 }
+function dealWithUserInput() {
+  // keyword
+  const input_keyword = prompt('請輸入你想撈取的關鍵字: ')
+  // is headless mode
+  let is_headless_mode = prompt('是否要使用無視窗模式(預設為否): 輸入 "y" or "n"', 'n')
+  if(is_headless_mode !== 'y' && is_headless_mode !== 'n') {
+    log('輸入錯誤，預設使用無視窗模式')
+    is_headless_mode = false
+  } else {
+    is_headless_mode = is_headless_mode === 'y'
+  }
+  // output path
+  const homeDir = os.homedir()
+  let output_file_path = prompt('結果存取位置(預設為桌面): ', homeDir)
+  if(output_file_path == homeDir) {
+    output_file_path = path.join(output_file_path, "Desktop")
+  }
+  // debug log
+  let debug_log = prompt('是否要觀看撈取過程訊息(預設為否): 輸入 "y" or "n"', 'n')
+  if(debug_log !== 'y' && debug_log !== 'n') {
+    log('輸入錯誤，預設為不顯示撈取過程訊息')
+    debug_log = false
+  } else {
+    debug_log = debug_log === 'y'
+  }
+
+  return {
+    input_keyword,
+    is_headless_mode,
+    output_file_path,
+    debug_log
+  }
+}
 async function main () {
   try {
-    // deal with user input
-    const INPUT_KEYWORD = prompt('請輸入你想撈取的關鍵字: ')
+    let INPUT_KEYWORD, IS_HEADLESS_MODE, ABS_OUTPUT_PATH
+    const { input_mode } = argv
 
-    let IS_HEADLESS_MODE = prompt('是否要使用無視窗模式(預設為否): 輸入 "y" or "n"', 'n')
-    if(IS_HEADLESS_MODE !== 'y' && IS_HEADLESS_MODE !== 'n') {
-      log('輸入錯誤，終止程式。bye bye~')
-      process.exit()
+    if(input_mode === 'false') {
+      const { input_keyword, is_headless_mode, output_file_path, debug_log } = argv
+      INPUT_KEYWORD = input_keyword
+      IS_HEADLESS_MODE = is_headless_mode
+      ABS_OUTPUT_PATH = path.join(output_file_path, OUTPUT_FILE_NAME)
+      DEBUG_LOG = debug_log
     } else {
-      IS_HEADLESS_MODE = IS_HEADLESS_MODE === 'y'
-    }
-
-    const homeDir = os.homedir()
-    let OUTPUT_FILE_PATH = prompt('結果存取位置(預設為桌面): ', homeDir)
-    if(OUTPUT_FILE_PATH == homeDir) {
-      OUTPUT_FILE_PATH = path.join(OUTPUT_FILE_PATH, "Desktop")
-    }
-    const OUTPUT_FILE_NAME = 'result.txt'
-    const ABS_OUTPUT = path.join(OUTPUT_FILE_PATH, 'result.txt')
-    
-    DEBUG_LOG = prompt('是否要觀看撈取過程訊息(預設為否): 輸入 "y" or "n"', 'n')
-    if(DEBUG_LOG !== 'y' && DEBUG_LOG !== 'n') {
-      log('輸入錯誤，預設為不顯示撈取過程訊息')
-      DEBUG_LOG = false
-    } else {
-      DEBUG_LOG = DEBUG_LOG === 'y'
+      const {input_keyword, is_headless_mode, output_file_path, debug_log } = dealWithUserInput()
+      INPUT_KEYWORD = input_keyword
+      IS_HEADLESS_MODE = is_headless_mode
+      ABS_OUTPUT_PATH = path.join(output_file_path || getDesktopPath(), OUTPUT_FILE_NAME)
+      DEBUG_LOG = debug_log
     }
 
     log(
@@ -191,9 +228,9 @@ async function main () {
     const result = getResult(keywordResults)
     
     // write file
-    fs.writeFile(ABS_OUTPUT, result, (err) => {
+    fs.writeFile(ABS_OUTPUT_PATH, result, (err) => {
       if(err) throw err;
-      log(`已儲存檔案。檔案存放路徑: ${ABS_OUTPUT}`)
+      log(`已儲存檔案。檔案存放路徑: ${ABS_OUTPUT_PATH}`)
       browser.close()
       log(`執行結束。 bye bye~`)
       process.exit()
