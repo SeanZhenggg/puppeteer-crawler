@@ -10,6 +10,7 @@
   "license": "MIT",
   "dependencies": {
     "cheerio": "^1.0.0-rc.11",
+    "dotenv": "^16.0.1",
     "prompt-sync": "^4.2.0",
     "puppeteer": "^14.3.0",
     "request": "^2.88.2"
