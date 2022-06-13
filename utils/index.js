@@ -1,3 +1,6 @@
+const os = require('os')
+const path = require('path');
+
 function getRandomInt(min = 1, max = 3) {
   return Math.floor(Math.random() * (max - min) + min)
 }
@@ -12,7 +15,13 @@ function log(...messages){
   }
 }
 
+function getDesktopPath() {
+  const homeDir = os.homeDir()
+  return path.join(homeDir, "Desktop")
+}
+
 module.exports = {
   getRandomInt,
-  log
+  log,
+  getDesktopPath
 }
