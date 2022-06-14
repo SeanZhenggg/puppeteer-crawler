@@ -16,7 +16,7 @@ function log(...messages){
 }
 
 function getDesktopPath() {
-  const homeDir = os.homeDir()
+  const homeDir = os.homedir()
   return path.join(homeDir, "Desktop")
 }
 
