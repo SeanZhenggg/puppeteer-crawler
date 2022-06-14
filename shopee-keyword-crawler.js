@@ -16,16 +16,19 @@ const URL_KEYWORD_PARAMS_REGEXP = /keyword=(%23|%EF%BC%83){0,2}([A-Za-z0-9%]+)/
 const CITE_SEARCH_FILTER = '.*search.*'
 const URL_TAG_PARAMS_REGEXP = /(%23|%EF%BC%83){0,2}([A-Za-z0-9%]+)-tag/
 const CITE_TAG_FILTER = '.*-tag'
+const CATEGORY_SUBCATEGORY_REGEXP = /(sub)?category=([0-9]+)/g
 const SHOPEE_SITE_SYNTAX = 'site:shopee.tw'
 const NEXT_PAGE_SELECTOR = "#pnnext"
-
+const PAGES = 2
+const RECURSIVE_GET_INDEX = 1
 // debug log switch
 let DEBUG_LOG
 // output file name
 const OUTPUT_FILE_NAME = 'result.txt'
 
 // result variable
-const keywordResults = new Set()
+const keywordSaved = new Set()
+const keywordResults = []
 
 // functions
 async function doGoogleSearch(page, keyword) {
@@ -119,6 +122,21 @@ function getKeyword(data) {
       return false
   }
 }
+function getCategoryAndSubCategory(data) {
+  if(typeof data !== 'string') return [undefined, undefined]
+  let category, subcategory
+  const [matched, matched2] = data.match(CATEGORY_SUBCATEGORY_REGEXP) || []
+  if(matched) {
+    let [key, value] = matched.split('=');
+    key === 'category' ? (category = value) : (subcategory = value)
+  }
+  if(matched2) {
+    let [key, value] = matched2.split('=');
+    key === 'category' ? (category = value) : (subcategory = value)
+  }
+  
+  return [category, subcategory]
+}
 async function recursivelyGetKeywords(page, keyword, index = 0) {
   if(index === 0) DEBUG_LOG && log(`現在是第一層 ${keyword} 關鍵字搜尋...`)
   else DEBUG_LOG && log(`現在是第二層 ${keyword} 關鍵字搜尋...`)
@@ -126,20 +144,41 @@ async function recursivelyGetKeywords(page, keyword, index = 0) {
   let resultLinks = await getSearchResultLinks(page, `${keyword} ${SHOPEE_SITE_SYNTAX}`)
 
   try {
+    let matchedKeywords = []
     for(let i = 0; i < resultLinks.length; i++) {
       const pageUrl = resultLinks[i]
 
-      let matchedKeyword = getKeyword(pageUrl)
+      await Promise.all([page.waitForNavigation(), page.goto(pageUrl)]);
+      await page.waitForTimeout(1500)
+
+      const realUrl = page.url()
+      let matchedKeyword = getKeyword(realUrl)
+      let resultObj = {}
       if(matchedKeyword) {
-        DEBUG_LOG && log([`找到關鍵字 : \x1b[33m${matchedKeyword}\x1b[0m`])
-        keywordResults.add(matchedKeyword)
+        if(!keywordSaved.has(matchedKeyword)) {
+          DEBUG_LOG && log([`找到關鍵字 : \x1b[33m${matchedKeyword}\x1b[0m`])
+          keywordSaved.add(matchedKeyword)
+          if(index === 0) matchedKeywords.push(matchedKeyword)
+          resultObj['keyword'] = matchedKeyword
+  
+          let [category, subcategory] = getCategoryAndSubCategory(realUrl)
+          category && (resultObj['category'] = category);
+          subcategory && (resultObj['subcategory'] = subcategory);
+          (category || subcategory) && DEBUG_LOG && log(`此關鍵字有 category 或 subcategory 代號 : \x1b[33m${category}\x1b[0m, \x1b[33m${subcategory}\x1b[0m`);
+          keywordResults.push(resultObj);
+        }
       }
       else {
-        DEBUG_LOG && log(['\x1b[33m%s\x1b[0m', `[DEBUG MODE] [訊息]: 此連結沒有找到符合關鍵字(keyword或是tag): ${decodeURIComponent(pageUrl)}, 將不計入結果內`])
+        DEBUG_LOG && log(['\x1b[33m%s\x1b[0m', `[DEBUG MODE] [訊息]: 此連結沒有找到符合關鍵字(keyword或是tag): ${decodeURIComponent(realUrl)}, 將不計入結果內`])
       }
 
-      if(index !== 1) {
-        await recursivelyGetKeywords(page, matchedKeyword, index + 1)
+      await Promise.all([page.waitForNavigation(), page.goBack()]);
+      await page.waitForTimeout(1500)
+    }
+
+    if(index !== RECURSIVE_GET_INDEX) {
+      for(let i = 0; i < matchedKeywords.length; i++) {
+        await recursivelyGetKeywords(page, matchedKeywords[i], index + 1)
       }
     }
   } catch (error) {
@@ -147,36 +186,53 @@ async function recursivelyGetKeywords(page, keyword, index = 0) {
   }
 }
 function getResult(results) {
-  if(!(results instanceof Set)) throw new Error('[getResult] get error! wrong input type')
-  return Array.from(results).reduce((result, keyword) => {
-    return result += keyword + '\n'
+  if(!Array.isArray(results)) throw new Error('[getResult] get error! wrong input type')
+  return results.reduce((result, { keyword, category, subcategory }) => {
+    return result += (keyword + '\t' + (category || ' ') + '\t' + (subcategory || ' ') + '\n')
   }, '')
+}
+function checkHeadlessMode(is_headless_mode) {
+  if(is_headless_mode !== 'y' && is_headless_mode !== 'n') {
+    log('輸入錯誤，預設使用無視窗模式')
+    return false
+  }
+  return is_headless_mode === 'y'
+}
+function checkDebugLog(debug_log) {
+  if(debug_log !== 'y' && debug_log !== 'n') {
+    log('輸入錯誤，預設為不顯示撈取過程訊息')
+    return false
+  }
+  return debug_log === 'y'
 }
 function dealWithUserInput() {
   // keyword
   const input_keyword = prompt('請輸入你想撈取的關鍵字: ')
   // is headless mode
   let is_headless_mode = prompt('是否要使用無視窗模式(預設為否): 輸入 "y" or "n"', 'n')
-  if(is_headless_mode !== 'y' && is_headless_mode !== 'n') {
-    log('輸入錯誤，預設使用無視窗模式')
-    is_headless_mode = false
-  } else {
-    is_headless_mode = is_headless_mode === 'y'
-  }
+  is_headless_mode = checkHeadlessMode(is_headless_mode)
   // output path
-  const homeDir = os.homedir()
-  let output_file_path = prompt('結果存取位置(預設為桌面): ', homeDir)
-  if(output_file_path == homeDir) {
-    output_file_path = path.join(output_file_path, "Desktop")
-  }
+  let output_file_path = prompt('結果存取位置(預設為桌面): ')
+  !output_file_path && (output_file_path = getDesktopPath())
   // debug log
   let debug_log = prompt('是否要觀看撈取過程訊息(預設為否): 輸入 "y" or "n"', 'n')
-  if(debug_log !== 'y' && debug_log !== 'n') {
-    log('輸入錯誤，預設為不顯示撈取過程訊息')
-    debug_log = false
-  } else {
-    debug_log = debug_log === 'y'
+  debug_log = checkDebugLog(debug_log)
+
+  return {
+    input_keyword,
+    is_headless_mode,
+    output_file_path,
+    debug_log
   }
+}
+function dealWithEnv() {
+  let { input_keyword, is_headless_mode, output_file_path, debug_log } = process.env
+  // is headless mode
+  is_headless_mode = checkHeadlessMode(is_headless_mode)
+  // output path
+  !output_file_path && (output_file_path = getDesktopPath())
+  // debug log
+  debug_log = checkDebugLog(debug_log)
 
   return {
     input_keyword,
@@ -187,20 +243,22 @@ function dealWithUserInput() {
 }
 async function main () {
   try {
-    let INPUT_KEYWORD, IS_HEADLESS_MODE, ABS_OUTPUT_PATH
+    let INPUT_KEYWORD, IS_HEADLESS_MODE, OUTPUT_FILE_PATH, ABS_OUTPUT_PATH
     const { input_mode } = argv
 
     if(input_mode === 'false') {
-      const { input_keyword, is_headless_mode, output_file_path, debug_log } = argv
+      const { input_keyword, is_headless_mode, output_file_path, debug_log } = dealWithEnv()
       INPUT_KEYWORD = input_keyword
       IS_HEADLESS_MODE = is_headless_mode
+      OUTPUT_FILE_PATH = output_file_path
       ABS_OUTPUT_PATH = path.join(output_file_path, OUTPUT_FILE_NAME)
       DEBUG_LOG = debug_log
     } else {
       const {input_keyword, is_headless_mode, output_file_path, debug_log } = dealWithUserInput()
       INPUT_KEYWORD = input_keyword
       IS_HEADLESS_MODE = is_headless_mode
-      ABS_OUTPUT_PATH = path.join(output_file_path || getDesktopPath(), OUTPUT_FILE_NAME)
+      OUTPUT_FILE_PATH = output_file_path
+      ABS_OUTPUT_PATH = path.join(output_file_path, OUTPUT_FILE_NAME)
       DEBUG_LOG = debug_log
     }
 
@@ -224,7 +282,7 @@ async function main () {
     
     // get keywords
     await recursivelyGetKeywords(page, INPUT_KEYWORD, 0)
-    DEBUG_LOG && log(`搜尋結束，一共找到 ${keywordResults.size} 個關鍵字`)
+    DEBUG_LOG && log(`搜尋結束，一共找到 ${keywordSaved.size} 個關鍵字`)
     const result = getResult(keywordResults)
     
     // write file
