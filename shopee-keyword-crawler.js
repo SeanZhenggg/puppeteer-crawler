@@ -180,7 +180,7 @@ async function recursivelyGetKeywords(page, keyword, index = 0) {
         }
       }
       else {
-        DEBUG_LOG && log(['\x1b[33m%s\x1b[0m', `[DEBUG MODE] [訊息]: 此連結沒有找到符合關鍵字(keyword或是tag): ${decodeURIComponent(realUrl)}, 將不計入結果內`])
+        DEBUG_LOG && log(['\x1b[33m%s\x1b[0m', `[DEBUG MODE] [訊息]: 此連結沒有找到符合關鍵字(keyword或是tag): ${decodeURIComponent(pageUrl)}, 將不計入結果內`])
       }
     }
 
