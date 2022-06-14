@@ -137,6 +137,7 @@ function getCategoryAndSubCategory(data) {
   
   return [category, subcategory]
 }
+const hasCategoryAndSubCategory = data => CATEGORY_SUBCATEGORY_REGEXP.test(data)
 async function recursivelyGetKeywords(page, keyword, index = 0) {
   if(index === 0) DEBUG_LOG && log(`現在是第一層 ${keyword} 關鍵字搜尋...`)
   else DEBUG_LOG && log(`現在是第二層 ${keyword} 關鍵字搜尋...`)
@@ -147,33 +148,40 @@ async function recursivelyGetKeywords(page, keyword, index = 0) {
     let matchedKeywords = []
     for(let i = 0; i < resultLinks.length; i++) {
       const pageUrl = resultLinks[i]
-
-      await Promise.all([page.waitForNavigation(), page.goto(pageUrl)]);
-      await page.waitForTimeout(1500)
-
-      const realUrl = page.url()
-      let matchedKeyword = getKeyword(realUrl)
+      let matchedKeyword = getKeyword(pageUrl)
       let resultObj = {}
       if(matchedKeyword) {
         if(!keywordSaved.has(matchedKeyword)) {
-          DEBUG_LOG && log([`找到關鍵字 : \x1b[33m${matchedKeyword}\x1b[0m`])
+          let logs = `找到關鍵字 : \x1b[33m${matchedKeyword}\x1b[0m`
           keywordSaved.add(matchedKeyword)
           if(index === 0) matchedKeywords.push(matchedKeyword)
           resultObj['keyword'] = matchedKeyword
   
-          let [category, subcategory] = getCategoryAndSubCategory(realUrl)
-          category && (resultObj['category'] = category);
-          subcategory && (resultObj['subcategory'] = subcategory);
-          (category || subcategory) && DEBUG_LOG && log(`此關鍵字有 category 或 subcategory 代號 : \x1b[33m${category}\x1b[0m, \x1b[33m${subcategory}\x1b[0m`);
+          let hasSome = hasCategoryAndSubCategory(pageUrl)
+          if(hasSome) {
+            await Promise.all([page.waitForNavigation(), page.goto(pageUrl)]);
+            await page.waitForTimeout(1500)
+
+            const realUrl = page.url()
+            let [category, subcategory] = getCategoryAndSubCategory(realUrl)
+            if(category) {
+              logs += ` \x1b[33m${category}\x1b[0m`
+              resultObj['category'] = category
+            }
+            if(subcategory) {
+              logs += ` \x1b[33m${subcategory}\x1b[0m`
+              resultObj['subcategory'] = subcategory
+            }
+            await Promise.all([page.waitForNavigation(), page.goBack()]);
+            await page.waitForTimeout(1500)
+          }
+          DEBUG_LOG && log(logs);
           keywordResults.push(resultObj);
         }
       }
       else {
         DEBUG_LOG && log(['\x1b[33m%s\x1b[0m', `[DEBUG MODE] [訊息]: 此連結沒有找到符合關鍵字(keyword或是tag): ${decodeURIComponent(realUrl)}, 將不計入結果內`])
       }
-
-      await Promise.all([page.waitForNavigation(), page.goBack()]);
-      await page.waitForTimeout(1500)
     }
 
     if(index !== RECURSIVE_GET_INDEX) {
