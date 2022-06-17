@@ -62,7 +62,7 @@ async function goNextPage(page) {
       page.click(NEXT_PAGE_SELECTOR), // Clicking the link will indirectly cause a navigation
     ]);
     await page.waitForTimeout(getRandomInt() * 1000)
-
+    return [true, null]
   } catch (error) {
     return [null, error]
   }
