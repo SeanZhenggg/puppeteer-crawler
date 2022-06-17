@@ -13,9 +13,9 @@ const { getRandomInt, log, getDesktopPath } = require('./utils/index');
 const RESULT_LINK_SELECTOR = 'div.NJo7tc.Z26q7c.jGGQ5e > div > a'
 const GOOGLE_INPUT_SELECTOR = '[title="Google 搜尋"]'
 const URL_KEYWORD_PARAMS_REGEXP = /keyword=(%23|%EF%BC%83){0,2}([A-Za-z0-9%]+)/
-const CITE_SEARCH_FILTER = '.*search.*'
+const CITE_SEARCH_FILTER = 'search'
 const URL_TAG_PARAMS_REGEXP = /(%23|%EF%BC%83){0,2}([A-Za-z0-9%]+)-tag/
-const CITE_TAG_FILTER = '.*-tag'
+const CITE_TAG_FILTER = 'tag'
 const CATEGORY_SUBCATEGORY_REGEXP = /(sub)?category=([0-9]+)/g
 const SHOPEE_SITE_SYNTAX = 'site:shopee.tw'
 const NEXT_PAGE_SELECTOR = "#pnnext"
