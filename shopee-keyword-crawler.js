@@ -64,7 +64,7 @@ async function goNextPage(page) {
     await page.waitForTimeout(getRandomInt() * 1000)
 
   } catch (error) {
-    return Promise.reject(`[goNextPage] get error! ${error}`)
+    return [null, error]
   }
 }
 async function getFilteredSearchResultLinks(page) {
@@ -103,7 +103,11 @@ async function getSearchResultLinks(page, keyword, pages = 2) {
       const results = await getFilteredSearchResultLinks(page)
       resultLinks = resultLinks.concat(results)
       if(count === 0) break
-      await goNextPage(page)
+      const [, error] = await goNextPage(page)
+      if(error) {
+        console.log('[goNextPage] get error!', error)
+        break
+      }
     }
     return resultLinks
   } catch (error) {
