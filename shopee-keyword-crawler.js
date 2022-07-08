@@ -10,7 +10,7 @@ const prompt = require('prompt-sync')({ sigint: true })
 const { getRandomInt, log, getDesktopPath } = require('./utils/index');
 
 // constant
-const RESULT_LINK_SELECTOR = 'div.NJo7tc.Z26q7c.jGGQ5e > div > a'
+const RESULT_LINK_SELECTOR = 'div#rso > div > div > div > div a'
 const GOOGLE_INPUT_SELECTOR = '[title="Google 搜尋"]'
 const URL_KEYWORD_PARAMS_REGEXP = /keyword=(%23|%EF%BC%83){0,2}([A-Za-z0-9%]+)/
 const CITE_SEARCH_FILTER = 'search'
@@ -72,6 +72,22 @@ async function getFilteredSearchResultLinks(page) {
     const filterResults = await page.$$eval(RESULT_LINK_SELECTOR, 
       (results, searchFilter, tagFilter) => {
         return results
+          .filter(e => {
+            /**
+             * first filter 
+             * 1. image link(with aria-label)
+             * 2. webcache link(link start with path "webcache")
+             * 3. special image link(without aria-label but has img ele inside)
+             */
+            const href = e.getAttribute('href')
+            if(!href) return false
+            const hasAriaLabel = e.getAttribute('aria-label')
+            if(hasAriaLabel) return false
+            const hasImageEle = e.querySelector('img')
+            if(hasImageEle) return false
+
+            return !/webcache/.test(href)
+          })
           .filter(e => {
             const citeText = e.querySelector('cite[role="text"] > span').innerText
             const reg_search = new RegExp(searchFilter)
