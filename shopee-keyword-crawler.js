@@ -89,7 +89,8 @@ async function getFilteredSearchResultLinks(page) {
             return !/webcache/.test(href)
           })
           .filter(e => {
-            const citeText = e.querySelector('cite[role="text"] > span').innerText
+            const citeText = e.querySelector('cite[role="text"] > span')?.innerText
+            if(!citeText) return false
             const reg_search = new RegExp(searchFilter)
             const reg_tag = new RegExp(tagFilter)
             return reg_search.test(citeText) || reg_tag.test(citeText)
