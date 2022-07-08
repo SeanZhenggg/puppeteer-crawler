@@ -12,9 +12,9 @@ const { getRandomInt, log, getDesktopPath } = require('./utils/index');
 // constant
 const RESULT_LINK_SELECTOR = 'div#rso > div > div > div > div a'
 const GOOGLE_INPUT_SELECTOR = '[title="Google 搜尋"]'
-const URL_KEYWORD_PARAMS_REGEXP = /keyword=(%23|%EF%BC%83){0,2}([A-Za-z0-9%]+)/
+const URL_KEYWORD_PARAMS_REGEXP = /keyword=(_|%23|%EF%BC%83){0,2}([A-Za-z0-9%]+)/
 const CITE_SEARCH_FILTER = 'search'
-const URL_TAG_PARAMS_REGEXP = /(%23|%EF%BC%83){0,2}([A-Za-z0-9%]+)-tag/
+const URL_TAG_PARAMS_REGEXP = /(_|%23|%EF%BC%83){0,2}([A-Za-z0-9%]+)-tag/
 const CITE_TAG_FILTER = 'tag'
 const CATEGORY_SUBCATEGORY_REGEXP = /(sub)?category=([0-9]+)/g
 const SHOPEE_SITE_SYNTAX = 'site:shopee.tw'
@@ -133,10 +133,18 @@ async function getSearchResultLinks(page, keyword, pages = 2) {
 function getKeyword(data) {
   switch(true) {
     case /keyword=/.test(data):
-      var [, , matched] = data.match(URL_KEYWORD_PARAMS_REGEXP)
+      var [, , matched] = data.match(URL_KEYWORD_PARAMS_REGEXP) || []
+      if(!matched) {
+        DEBUG_LOG && log([`[DEBUG MODE] [訊息]: 連結 \x1b[33m${data}\x1b[0m 沒有經由 \x1b[33mURL_KEYWORD_PARAMS_REGEXP\x1b[0m 匹配關鍵字 , 將不計入結果內`])
+        return false
+      }
       return decodeURIComponent(matched)
     case /-tag/.test(data):
-      var [, , matched] = data.match(URL_TAG_PARAMS_REGEXP)
+      var [, , matched] = data.match(URL_TAG_PARAMS_REGEXP) || []
+      if(!matched) {
+        DEBUG_LOG && log([`[DEBUG MODE] [訊息]: 連結 \x1b[33m${data}\x1b[0m 沒有經由 \x1b[33mURL_TAG_PARAMS_REGEXP\x1b[0m 匹配關鍵字 , 將不計入結果內`])
+        return false
+      }
       return decodeURIComponent(matched)
     default:
       return false
