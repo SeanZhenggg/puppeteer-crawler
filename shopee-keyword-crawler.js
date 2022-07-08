@@ -157,7 +157,10 @@ function getCategoryAndSubCategory(data) {
   
   return [category, subcategory]
 }
-const hasCategoryAndSubCategory = data => CATEGORY_SUBCATEGORY_REGEXP.test(data)
+function hasCategoryAndSubCategory(data) {
+  return CATEGORY_SUBCATEGORY_REGEXP.test(data)
+}
+
 async function recursivelyGetKeywords(page, keyword, index = 0) {
   if(index === 0) DEBUG_LOG && log(`現在是第一層 ${keyword} 關鍵字搜尋...`)
   else DEBUG_LOG && log(`現在是第二層 ${keyword} 關鍵字搜尋...`)
