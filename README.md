@@ -9,7 +9,7 @@ step2: open command line interface, cd into directory where you downloaded and t
 npm install
 ```
 
-step3: modify the ~~OPTIONS(specified in uppercase format)~~ in .env file under the directory and save it.
+step3: modify the **OPTIONS(specified in uppercase format)** in .env file under the directory and save it.
 
 step4: type
 ```
