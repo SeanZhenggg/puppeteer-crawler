@@ -22,7 +22,7 @@ step 4: in the command line interface, type:
 npm install
 ```
 
-step 5: modify the **OPTIONS(specified in uppercase format)** in .env file under the directory and save it.
+step 5: modify the **OPTIONS** in .env file under the directory and save the file.
  
 | <img width="655" alt="截圖 2022-07-11 上午10 36 12" src="https://user-images.githubusercontent.com/45516753/178178410-ce60f62c-b339-4d93-b3a1-7fb68016ff5b.png"> |
 | :--: |
